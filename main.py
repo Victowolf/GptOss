@@ -39,8 +39,17 @@ app.add_middleware(
 
 @app.post("/ask_gptoss")
 async def generate(prompt: str = Form(...)):
+    chat_prompt = (
+        "<|im_start|>system\n"
+        + "Reasoning: high\n"
+        + "<|im_end|>\n"
+        + "<|im_start|>user\n"
+        + prompt
+        + "\n<|im_end|>\n"
+        + "<|im_start|>assistant\n"
+    )
     
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    inputs = tokenizer(chat_prompt, return_tensors="pt").to(device) 
 
     output_ids = model.generate(
         **inputs,
