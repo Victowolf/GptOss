@@ -22,11 +22,11 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 # 🚨 No BitsAndBytesConfig here — the model is already MXFP4 quantized
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
-    device_map="auto",
-    torch_dtype=torch.float16,  # Allowed
-    trust_remote_code=True,
+    torch_dtype=torch.bfloat16,       # <-- FORCE BF16
+    device_map="auto",                # <-- shards across GPU and CPU
+    low_cpu_mem_usage=True,           # <-- avoids full memory spike
+    trust_remote_code=True
 )
-
 app = FastAPI()
 
 app.add_middleware(
