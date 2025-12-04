@@ -14,15 +14,15 @@ spec:
           args:
             - |
               set -euo pipefail
-              echo "=== Starting RS-LLaVA server job ==="
+              echo "=== Starting GPT-OSS server job ==="
               cd /workspace || mkdir -p /workspace && cd /workspace
 
               # clone the repo you specified
-              rm -rf LavaRS || true
-              echo "[1] Cloning Victowolf/LavaRS ..."
+              rm -rf GptOss || true
+              echo "[1] Cloning Victowolf/GptOss ..."
               git clone https://github.com/Victowolf/GptOss.git
 
-              cd LavaRS || (echo "ERROR: LavaRS folder not found"; exit 1)
+              cd GptOss || (echo "ERROR: GptOss folder not found"; exit 1)
                # place our files into the repo (optionally copy from a configmap or mount)
               # If your CI already includes the files, skip the copy steps.
 
