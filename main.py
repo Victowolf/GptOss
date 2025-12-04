@@ -2,29 +2,22 @@ import os
 import torch
 from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import pipeline
 from fastapi.middleware.cors import CORSMiddleware
 
-# Disable Flash Attention for MIG
 os.environ["FLASH_ATTENTION"] = "0"
 os.environ["DISABLE_FLASH_ATTENTION"] = "1"
-os.environ["FLASHATTENTION_DISABLED"] = "1"
 os.environ["HF_DISABLE_FLASH_ATTENTION"] = "1"
 
 MODEL_NAME = "openai/gpt-oss-20b"
 
-print("=== Loading GPT-OSS-20B ===")
+print("=== Loading GPT-OSS-20B (Chat Pipeline) ===")
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    torch_dtype=torch.bfloat16, 
+pipe = pipeline(
+    "text-generation",
+    model=MODEL_NAME,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
-    low_cpu_mem_usage=True,
-    trust_remote_code=True
 )
 
 app = FastAPI()
@@ -38,30 +31,25 @@ app.add_middleware(
 )
 
 @app.post("/ask_gptoss")
-async def generate(prompt: str = Form(...)):
+async def ask_gptoss(prompt: str = Form(...)):
     messages = [
         {"role": "system", "content": "Reasoning: high"},
-        {"role": "user",   "content": prompt}
+        {"role": "user", "content": prompt},
     ]
 
-    # ⭐ THIS IS THE MAGIC LINE YOU WERE MISSING
-    inputs = model.apply_chat_template(
+    out = pipe(
         messages,
-        tokenize=True,
-        return_tensors="pt"
-    ).to(device)
-
-    output = model.generate(
-        inputs,
-        max_new_tokens=512,
-        temperature=0.7,
-        do_sample=True
+        max_new_tokens=300,
+        do_sample=True,
+        temperature=0.7
     )
 
-    decoded = tokenizer.decode(output[0], skip_special_tokens=True)
-    return JSONResponse({"response": decoded})
+    # HuggingFace returns a list → each item has "generated_text" → list of messages
+    answer = out[0]["generated_text"][-1]["content"]
+
+    return JSONResponse({"response": answer})
 
 
 @app.get("/")
 def root():
-    return {"status": "gpt-oss-20b is live!"}
+    return {"status": "gpt-oss-20b chat API is live!"}
