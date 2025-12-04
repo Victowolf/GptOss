@@ -13,7 +13,7 @@ os.environ["HF_DISABLE_FLASH_ATTENTION"] = "1"
 
 MODEL_NAME = "openai/gpt-oss-20b"
 
-print("=== Loading GPT-OSS-20B (MXFP4) ===")
+print("=== Loading GPT-OSS-20B ===")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -37,7 +37,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/generate")
+@app.post("/ask_gptoss")
 async def generate(prompt: str = Form(...)):
     
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
@@ -56,4 +56,4 @@ async def generate(prompt: str = Form(...)):
 
 @app.get("/")
 def root():
-    return {"status": "gpt-oss-20b (MXFP4) is live!"}
+    return {"status": "gpt-oss-20b is live!"}
