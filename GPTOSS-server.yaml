@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: GptOSS-server
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: lava-rs-container
+          image: nvcr.io/nvidia/pytorch:24.03-py3
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "=== Starting RS-LLaVA server job ==="
+              cd /workspace || mkdir -p /workspace && cd /workspace
+
+              # clone the repo you specified
+              rm -rf LavaRS || true
+              echo "[1] Cloning Victowolf/LavaRS ..."
+              git clone https://github.com/Victowolf/GptOss.git
+
+              cd LavaRS || (echo "ERROR: LavaRS folder not found"; exit 1)
+               # place our files into the repo (optionally copy from a configmap or mount)
+              # If your CI already includes the files, skip the copy steps.
+
+              # make sure start.sh is executable
+              chmod +x start.sh || true
+
+              echo "[4] Running start.sh ..."
+              ./start.sh
+
+              echo "=== Gpt-oss Server Exited ==="
+          resources:
+            limits:
+              nvidia.com/mig-2g.35gb: 1
