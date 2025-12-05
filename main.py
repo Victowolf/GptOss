@@ -1,38 +1,35 @@
 # main.py
 import os
 import re
-import json
 import torch
 from fastapi import FastAPI, Form
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from transformers import pipeline
 
-# =============================================================
-#  Optional environment flags (recommended for stability)
-# =============================================================
+# --------------------------------------------------------------------
+# Disable FlashAttention if your hardware does not support it
+# --------------------------------------------------------------------
 os.environ.setdefault("FLASH_ATTENTION", "0")
 os.environ.setdefault("DISABLE_FLASH_ATTENTION", "1")
 os.environ.setdefault("HF_DISABLE_FLASH_ATTENTION", "1")
 
-# =============================================================
-#  Model Configuration
-# =============================================================
+# --------------------------------------------------------------------
+# Load GPT-OSS-20B Pipeline
+# --------------------------------------------------------------------
 MODEL_NAME = "openai/gpt-oss-20b"
-MAX_NEW_TOKENS = 512
 
-print("=== Loading GPT-OSS-20B via Transformers Pipeline ===")
 pipe = pipeline(
     "text-generation",
     model=MODEL_NAME,
+    device_map="auto",
     torch_dtype=torch.bfloat16,
-    device_map="auto"
 )
 
-# =============================================================
-#  FastAPI Server Setup
-# =============================================================
-app = FastAPI(title="GPT-OSS Harmony Server (final channel only)")
+# --------------------------------------------------------------------
+# FastAPI Application
+# --------------------------------------------------------------------
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,11 +39,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =============================================================
-#  HARMONY TEMPLATE — Manual + Stable (recommended)
-# =============================================================
-
-HARMONY_PROMPT = """<|start|>system<|message|>
+# --------------------------------------------------------------------
+# Harmony Prompt Template (FORCE FINAL CHANNEL)
+# --------------------------------------------------------------------
+HARMONY_TEMPLATE = """<|start|>system<|message|>
 {system_msg}
 <|end|>
 
@@ -59,107 +55,54 @@ HARMONY_PROMPT = """<|start|>system<|message|>
 <|end|>
 
 <|start|>assistant
+<|channel|>final<|message|>
 """
 
-
-def build_harmony_prompt(system_msg, developer_msg, user_msg):
-    return HARMONY_PROMPT.format(
-        system_msg=system_msg.strip(),
-        developer_msg=developer_msg.strip(),
-        user_msg=user_msg.strip(),
+def build_prompt(system, developer, user):
+    return HARMONY_TEMPLATE.format(
+        system_msg=system.strip(),
+        developer_msg=developer.strip(),
+        user_msg=user.strip(),
     )
 
-
-# =============================================================
-#  Extract final channel only (NO analysis leakage)
-# =============================================================
-
+# --------------------------------------------------------------------
+# Extract ONLY the final channel (ZERO analysis leakage)
+# --------------------------------------------------------------------
 FINAL_RE = re.compile(
-    r"<\|channel\|>final<\|message\|>(.*?)(?:<\|return\|>|<\|channel\|>|<\|end\|>|$)",
+    r"<\|channel\|>final<\|message\|>(.*)",
     re.S
 )
-
-ANALYSIS_RE = re.compile(
-    r"<\|channel\|>analysis<\|message\|>.*?(?=<\|channel\|>|<\|return\|>|$)",
-    re.S
-)
-
-
-def extract_final_text(generated: str) -> str:
-    """Return ONLY the <|channel|>final content. Never return analysis."""
-    # 1) Remove analysis block if it exists
-    generated = ANALYSIS_RE.sub("", generated)
-
-    # 2) Extract final channel
-    m = FINAL_RE.search(generated)
-    if m:
-        return m.group(1).strip()
-
-    # 3) Fallback: remove Harmony control tokens and return remainder
-    sanitized = re.sub(
-        r"<\|start\|>|<\|end\|>|<\|channel\|>.*?<\|message\|>|<\|return\|>",
-        "",
-        generated
-    ).strip()
-
-    return sanitized
-
-
-# =============================================================
-#  Remove prompt echo (works across transformers versions)
-# =============================================================
-
-def strip_prompt_echo(generated: str, prompt: str) -> str:
-    """If the model duplicated the prompt in the output, remove it."""
-    norm_prompt = re.sub(r"\s+", " ", prompt).strip()
-    norm_gen = re.sub(r"\s+", " ", generated).strip()
-
-    idx = norm_gen.find(norm_prompt)
-    if idx != -1:
-        return generated[idx + len(prompt):].lstrip()
-
-    return generated
-
-
-# =============================================================
-#  The main endpoint: returns ONLY the final answer
-# =============================================================
 
 @app.post("/ask_gptoss")
 async def ask_gptoss(prompt: str = Form(...)):
-    system_msg = "You are an expert in Earth observation. Reasoning: medium."
-    developer_msg = (
-        "Follow EO standards, be factual, concise, and DO NOT output chain-of-thought "
-        "or analysis to the user."
-    )
 
-    harmony_prompt = build_harmony_prompt(system_msg, developer_msg, prompt)
+    system_msg = "You are a world-class Earth Observation analyst. Reasoning: medium."
+    developer_msg = "Always respond with EO-standard terminology. NEVER output analysis, only final results."
+    
+    harmony_prompt = build_prompt(system_msg, developer_msg, prompt)
 
-    # ---- Run inference ----
-    out = pipe(
-        harmony_prompt,
-        max_new_tokens=MAX_NEW_TOKENS,
-        return_full_text=False  # prevents prompt echo in many transformers versions
-    )
+    # Get model output (NO prompt echo)
+    out = pipe(harmony_prompt, max_new_tokens=512, return_full_text=False)
 
-    if not out or "generated_text" not in out[0]:
-        return JSONResponse({"error": "Unexpected model output", "raw": str(out)})
+    raw = out[0]["generated_text"]
 
-    generated = out[0]["generated_text"]
+    # Extract <|channel|>final
+    m = FINAL_RE.search(raw)
+    if not m:
+        # fallback: remove Harmony control tokens
+        cleaned = re.sub(r"<\|.*?\|>", "", raw).strip()
+        return JSONResponse({"response": cleaned})
 
-    # ---- Remove prompt echo if present ----
-    if "<|start|>system" in generated:
-        generated = strip_prompt_echo(generated, harmony_prompt)
+    final_text = m.group(1).strip()
 
-    # ---- Extract ONLY the final channel ----
-    final_text = extract_final_text(generated)
+    # Remove any rogue analysis if model attempted to slip it in
+    final_text = re.sub(r"<\|channel\|>analysis.*", "", final_text, flags=re.S).strip()
 
     return JSONResponse({"response": final_text})
 
-
-# =============================================================
-#  Health Check
-# =============================================================
+# --------------------------------------------------------------------
+# Health Endpoint
+# --------------------------------------------------------------------
 @app.get("/")
 def root():
-    return {"status": "GPT-OSS Harmony Server Running (final channel only)"}
+    return {"status": "GPT-OSS Final-Only Server Running"}
