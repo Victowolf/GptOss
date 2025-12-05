@@ -76,13 +76,13 @@ FINAL_RE = re.compile(
 @app.post("/ask_gptoss")
 async def ask_gptoss(prompt: str = Form(...)):
 
-    system_msg = "You are a world-class Earth Observation analyst. Reasoning: medium."
+    system_msg = "You are a world-class Earth Observation analyst. Reasoning: high."
     developer_msg = "Always respond with EO-standard terminology. NEVER output analysis, only final results."
     
     harmony_prompt = build_prompt(system_msg, developer_msg, prompt)
 
     # Get model output (NO prompt echo)
-    out = pipe(harmony_prompt, max_new_tokens=512, return_full_text=False)
+    out = pipe(harmony_prompt, max_new_tokens=512, return_full_text=False, do_sample=False)
 
     raw = out[0]["generated_text"]
 
