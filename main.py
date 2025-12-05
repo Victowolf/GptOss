@@ -39,13 +39,17 @@ async def ask(prompt: str = Form(...)):
         {"role": "user", "content": prompt},
     ]
 
-    # Generate output using Harmony template
-    out = pipe(messages, max_new_tokens=512)
+    out = pipe(
+        messages,
+        max_new_tokens=512,
+        add_generation_prompt=True   # REQUIRED!
+    )
 
-    # ✔ Correct extraction from pipeline output
-    reply = out[0]["generated_text"][0]["content"]
+    # Correct: get the assistant's last generated message
+    reply = out[0]["generated_text"][-1]["content"]
 
     return JSONResponse({"response": reply})
+
 
 @app.get("/")
 def root():
