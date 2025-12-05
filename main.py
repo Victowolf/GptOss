@@ -2,16 +2,17 @@ import os
 import torch
 from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse
-from transformers import pipeline
 from fastapi.middleware.cors import CORSMiddleware
+from transformers import pipeline
 
+# Disable FlashAttention (optional)
 os.environ["FLASH_ATTENTION"] = "0"
 os.environ["DISABLE_FLASH_ATTENTION"] = "1"
 os.environ["HF_DISABLE_FLASH_ATTENTION"] = "1"
 
 MODEL_NAME = "openai/gpt-oss-20b"
 
-print("=== Loading GPT-OSS-20B (Chat Pipeline) ===")
+print("=== Loading GPT-OSS-20B with PIPELINE ===")
 
 pipe = pipeline(
     "text-generation",
@@ -22,6 +23,7 @@ pipe = pipeline(
 
 app = FastAPI()
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,25 +33,20 @@ app.add_middleware(
 )
 
 @app.post("/ask_gptoss")
-async def ask_gptoss(prompt: str = Form(...)):
+async def ask(prompt: str = Form(...)):
     messages = [
-        {"role": "system", "content": "Reasoning: high"},
+        {"role": "system", "content": "You are an expert in earth observation."},
         {"role": "user", "content": prompt},
     ]
 
-    out = pipe(
-        messages,
-        max_new_tokens=300,
-        do_sample=True,
-        temperature=0.7
-    )
+    # Generate output using Harmony template
+    out = pipe(messages, max_new_tokens=512)
 
-    # HuggingFace returns a list → each item has "generated_text" → list of messages
-    answer = out[0]["generated_text"][-1]["content"]
+    # ✔ Correct extraction from pipeline output
+    reply = out[0]["generated_text"][0]["content"]
 
-    return JSONResponse({"response": answer})
-
+    return JSONResponse({"response": reply})
 
 @app.get("/")
 def root():
-    return {"status": "gpt-oss-20b chat API is live!"}
+    return {"status": "gpt-oss-20b is live via pipeline!"}
